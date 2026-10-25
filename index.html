@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-GIu3DC1tEssjGh9o75N3jJtLzgrRINRGb32U3x8ZBbw='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FJlJ+5FlHF1WB1QYW+1XassFajOU0aKfQhdvLMPSWDc='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1087,7 +1087,7 @@ nav button.nx {
 </style></head>
 <body><div id="splash" aria-hidden="true"><img src="icon-192.png" width="132" height="132" alt=""><b>Lift Log</b><span id="sver"></span><div class="bb"><i class="pl pb"></i><i class="pl pr"></i><i class="sl"></i><div class="shaft"><i></i><i></i><i></i><i></i><i></i></div><i class="sl"></i><i class="pl pr"></i><i class="pl pb"></i></div></div><div id="app"></div><div id="toast" hidden></div>
 <script>
-const VER='2.14'; // app version, bumped automatically by tools/build.py on every change
+const VER='2.15'; // app version, bumped automatically by tools/build.py on every change
 /* Turning numbers and dates into text. Pure functions, no DOM. */
 
 // A number for display: at most 2 decimals, no trailing zeros; '' for empty or invalid input.
@@ -3815,8 +3815,33 @@ Object.assign(actions, {
 });
 addEventListener('online', () => githubConfig() && autoBackup());
 /* Start-up: register the service worker (offline use), open the database, draw the first screen. */
-if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
-  navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).catch(() => {});
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  // The app opens from the worker's cache (sw.js). When a new version's worker takes over, reload once so the screen
+  // runs the new version; not on the very first install, and not while a field is being typed in (the workout in
+  // progress is saved and reopens after the reload).
+  const hadWorker = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  const reloadWhenIdle = () => {
+    if (document.activeElement?.matches?.('input,textarea,select')) return setTimeout(reloadWhenIdle, 1500);
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadWorker || reloading) return;
+    reloading = true;
+    reloadWhenIdle();
+  });
+  navigator.serviceWorker
+    .register('sw.js', { scope: './', updateViaCache: 'none' })
+    .then(reg => {
+      // look for a new version in the background on every start (browsers don't always check on their own) and
+      // whenever the app comes back to the screen (an installed app is often resumed rather than reopened)
+      reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    })
+    .catch(() => {});
+}
 navigator.storage?.persist?.();
 $('#sver').textContent = 'v' + VER;
 const hideSplash = () => {

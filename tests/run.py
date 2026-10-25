@@ -490,6 +490,61 @@ def offline_works_and_other_apps_caches_survive(app):
 
 
 @test
+def opens_without_downloading_and_a_release_takes_over(app):
+    """Opening the app must not wait for the server (cache-first, 2026-10-25), and a new release must still reach the
+    phone by itself. Runs on a copy of the app with its own server, so the test can "release" a version (a new cache name
+    in sw.js, as tools/build.py writes on every release)."""
+    import os, shutil, tempfile
+    copy = pathlib.Path(tempfile.mkdtemp(prefix="lift-log-release-"))
+    for f in ("index.html", "sw.js", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"):
+        shutil.copy(ROOT / f, copy / f)
+    shutil.copytree(ROOT / "fonts", copy / "fonts")
+    asked = []
+    class Logged(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-cache"); super().end_headers()
+        def do_GET(self):
+            asked.append(self.path.split("?")[0].lstrip("/")); super().do_GET()
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Logged, directory=str(copy)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}/"
+    ctx = app.ctx.browser.new_context(viewport={"width": 390, "height": 844})
+    pg = ctx.new_page()
+    started = "typeof state!=='undefined'&&document.querySelector('nav')"
+    try:
+        pg.goto(base + "index.html"); pg.wait_for_function(started)
+        pg.evaluate("navigator.serviceWorker.ready")
+        if not pg.evaluate("!!navigator.serviceWorker.controller"):
+            pg.reload()
+        pg.wait_for_function("!!navigator.serviceWorker.controller", timeout=15000)
+        pg.reload(); pg.wait_for_function(started)        # anything not saved at install is kept from here on
+        asked.clear()
+        pg.reload(); pg.wait_for_function(started)
+        app_files = [u for u in asked if (u == "" or re.search(r"\.(html|js|css|woff2)$", u)) and u != "sw.js"]
+        eq(app_files, [], "opening the app downloaded app files")
+
+        sw = (copy / "sw.js").read_text()
+        (copy / "sw.js").write_text(re.sub(r"const C='[^']*';", "const C='lift-log-release-test';", sw))
+        t = time.time() + 60                              # the test server compares times to the second
+        os.utime(copy / "sw.js", (t, t))
+        loads = []
+        pg.on("load", lambda p: loads.append(p.url))
+        pg.reload()                                       # opens as usual (old version); the new one installs meanwhile
+        for _ in range(150):                              # ... and then the app reloads itself into it
+            if len(loads) >= 2:
+                break
+            pg.wait_for_timeout(100)
+        ok(len(loads) >= 2, f"the app reloaded by itself after the release (page loads: {len(loads)})")
+        pg.wait_for_function(started)
+        keys = [k for k in pg.evaluate("caches.keys()") if k.startswith("lift-log-")]
+        eq(keys, ["lift-log-release-test"], "the app reloaded into the new version by itself and keeps only its cache")
+    finally:
+        ctx.close(); srv.shutdown(); shutil.rmtree(copy, ignore_errors=True)
+
+
+@test
 def storage_keys_are_prefixed_and_old_ones_move_over(app):
     ctx = app.ctx.browser.new_context(service_workers="block"); pg = ctx.new_page()
     base = app.pg.url.rsplit("/", 1)[0] + "/"
