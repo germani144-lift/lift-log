@@ -284,10 +284,10 @@ def percent_plan_and_switching_views(app):
     eq(app.js("workout.items[0].mode"), "pct", "workout starts in the plan's mode")
     eq([r["w"] for r in app.js("workout.items[0].rows")], [70, 70, 70], "no history yet: exactly the plan, 70% of 100")
     hdr = app.pg.inner_text(".set.hdr")
-    ok("% of 1RM" in hdr and "RPE" in hdr, f"% view headers, got {hdr!r}")
+    ok("kg" in hdr and "% 1RM" in hdr and "RPE" in hdr, f"% view headers, got {hdr!r}")
     row = lambda j: f'.set[data-j="{j}"] >> '
-    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "[data-f=rir]")), ("70", ""), "shows % and an empty RPE to fill in")
-    ok("70 kg" in app.pg.inner_text(row(0) + ".inf"), "shows the kg to load")
+    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "input[data-f=p]"), app.pg.input_value(row(0) + "[data-f=rir]")),
+       ("70", "70", ""), "shows kg first, the % under it, and an empty RPE to fill in")
     def log(j, rpe):
         app.fill(row(j) + "[data-f=rir]", 10 - rpe); app.pg.locator(row(j) + "[data-f=rir]").dispatch_event("input"); app.click(row(j) + "[data-a=log]")
     log(0, 7)
@@ -301,6 +301,25 @@ def percent_plan_and_switching_views(app):
     w = app.js("workout.items[0].rows[2].w")
     ok(63 <= w < 70 and app.js("workout.items[0].rows[2].adj"), f"harder than the first set: the next one gets lighter (max -10%), got {w}")
     ok("adjusted" in app.pg.inner_text(row(2) + ".inf"), "shows that it adjusted")
+
+
+@test
+def percent_view_kg_and_percent_update_each_other(app):
+    app.new_exercise("Clean", inc=2.5, cur=120)
+    _plan_one(app, "Clean", "pct", {"n": 2, "r": 2, "p": 75})
+    row = '.set[data-j="0"] >> '
+    kg, pc = row + "input[data-f=w]", row + "input[data-f=p]"
+    eq((app.pg.input_value(kg), app.pg.input_value(pc)), ("90", "75"), "75% of 120 = 90 kg")
+    app.pg.locator(kg).fill("96")                            # typing kg (fill sends input events like a phone)
+    eq((app.pg.input_value(pc), app.js("workout.items[0].rows[0].w")), ("80", 96), "kg typed: the % follows as you type")
+    app.pg.locator(pc).fill("85")
+    eq((app.pg.input_value(kg), app.js("workout.items[0].rows[0].w")), ("102", 102), "% typed: the kg follows")
+    app.pg.locator(pc).fill("")
+    eq((app.pg.input_value(kg), app.js("workout.items[0].rows[0].w")), ("", ""), "clearing the % clears the kg")
+    app.pg.locator(kg).fill("100"); app.click(row + "[data-a=log]")
+    eq(app.js("(async()=>(await getAll('sets')).pop().w)()"), 100, "the kg is what gets logged")
+    eq(app.pg.input_value(pc), "83.3", "logged set still shows its %")
+    eq(app.errors, [])
 
 
 @test
@@ -417,8 +436,7 @@ def bodyweight_lifts_use_total_load(app):
     _plan_one(app, "Pull-ups", "pct", {"n": 3, "r": 3, "p": 80})
     eq([r["w"] for r in app.js("workout.items[0].rows")], [16, 16, 16], "80% of 120 kg total, minus 80 kg bodyweight")
     row = '.set[data-j="0"] >> '
-    eq(app.pg.input_value(row + "input[data-f=w]"), "80", "shown as 80%")
-    ok("+16 kg" in app.pg.inner_text(row + ".inf"), "shows the added kg to load")
+    eq((app.pg.input_value(row + "input[data-f=w]"), app.pg.input_value(row + "input[data-f=p]")), ("16", "80"), "kg to add (16), and 80% of the total")
     ok("incl. 80 kg bodyweight" in app.pg.inner_text(".card:has([data-a=addset])"), "says bodyweight is included")
     app.click(row + "[data-a=log]")
     eq(app.js("(async()=>(await getAll('sets')).pop().bw)()"), 80, "logged set remembers the bodyweight")

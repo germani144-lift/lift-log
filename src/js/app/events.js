@@ -88,9 +88,14 @@ app.addEventListener('input', e => {
       v = t.value === '' ? '' : +t.value;
     r.auto = false;
     delete r.adj;
-    if (it.mode == 'pct' && f == 'w')
+    if (f == 'p') {
+      // % of 1RM typed: work out the kg (minus bodyweight where it's included) and show it in the kg field.
       r.w = v === '' ? '' : it.ref > 0 ? Math.max(0, (v / 100) * it.ref - (it.bwo || 0)) : '';
-    else r[f] = v;
+      $('[data-f=w]', s).value = kgText(r);
+    } else {
+      r[f] = v;
+      if (f == 'w' && it.mode == 'pct') $('[data-f=p]', s).value = percentOfRef(it, r.w);
+    }
     if (t.tagName == 'SELECT') t.classList.toggle('ph', t.value === '');
     saveWorkout();
     updateSetInfo(s);

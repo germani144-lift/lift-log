@@ -6,6 +6,7 @@ function updateSetInfo(s) {
   $('.inf>span', s).innerHTML = setInfoHtml(it, it.rows[s.dataset.j], exerciseById(it.exId));
 }
 
+// The % of the reference 1RM that `w` kg on the bar is (bodyweight included where it counts); '' when unknown.
 const percentOfRef = (it, w) => {
   const t = (w === '' || w == null ? 0 : +w) + (it.bwo || 0);
   return it.ref > 0 && t > 0 && (w !== '' || it.bwo) ? Math.round((t / it.ref) * 1000) / 10 : '';
@@ -22,14 +23,17 @@ function exerciseCard(it, i) {
     : '';
   let h = `<div class=card><div class=hd><b style="flex:1">${esc(ex.name)}</b><span class=seg role=group aria-label="Track by"><button class="${P ? '' : 'on'}" data-a=mode data-i=${i} data-m=rir>RIR</button><button class="${P ? 'on' : ''}" data-a=mode data-i=${i} data-m=pct>% 1RM</button></span><button class=s style="width:40px" data-a=rmx data-i=${i} aria-label="Remove exercise">×</button></div><div class=m>${esc([ref, ex.bwl ? (it.bwo ? `incl. ${fmt(it.bwo)} kg bodyweight` : 'set your bodyweight in Settings (⚙)') : '', it.hint].filter(Boolean).join(' · '))}</div>`;
   h +=
-    `<div class="set hdr"><span>${P ? '% of 1RM' : 'Weight (kg)'}</span><span></span><span>Reps</span><span></span><span>${P ? 'RPE' : 'RIR'}</span><span></span></div>` +
+    `<div class="set hdr"><span>${P ? 'kg · % 1RM' : 'Weight (kg)'}</span><span></span><span>Reps</span><span></span><span>${P ? 'RPE' : 'RIR'}</span><span></span></div>` +
     it.rows
       .map((r, j) => {
         const d = r.done ? 'disabled' : '';
-        const wv = P ? percentOfRef(it, r.w) : r.w > 0 ? fmt(r.w) : r.done ? 'BW' : '',
-          ev = r.rir === '' || r.rir == null ? '' : P ? fmt(10 - r.rir) : fmt(r.rir);
+        const kg = `<input data-f=w inputmode=decimal aria-label="Weight in kg, empty for bodyweight" value="${kgText(r)}" ${d}>`;
+        // % view: kg first, and the % of 1RM under it; both editable, each updates the other as you type.
+        const weightCell = P
+          ? `<div class=wcell>${kg}<label class=pctin><input data-f=p inputmode=decimal aria-label="Percent of 1RM" value="${percentOfRef(it, r.w)}" ${it.ref > 0 ? d : 'disabled placeholder="–"'}><span>%</span></label></div>`
+          : kg;
         return `<div class="set ${r.done ? 'dn' : ''}${r.wu ? ' wu' : ''}" data-i=${i} data-j=${j}>
-  <input data-f=w inputmode=decimal aria-label="${P ? 'Percent of 1RM' : 'Weight in kg, empty for bodyweight'}" value="${wv}" ${d}>
+  ${weightCell}
   <button class=s data-a=step data-d=-1 aria-label="One rep less" ${d}>−</button><input data-f=r inputmode=numeric placeholder=reps aria-label=Reps value="${fmt(r.r)}" ${d}><button class=s data-a=step data-d=1 aria-label="One rep more" ${d}>+</button>${rirSelect(`data-f=rir aria-label="${P ? 'RPE (10 = max effort)' : 'Reps in reserve'}" ${d}`, r.rir, { pct: P })}
   <button class="ck ${r.done ? 'on' : ''}" data-a=${r.done ? 'undo' : 'log'} aria-label="${r.done ? 'Undo set' : 'Log set'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg></button>
   <div class=inf><span>${setInfoHtml(it, r, ex)}</span><span><button class=lk data-a=wu>${r.wu ? 'Make working set' : 'Mark as warm-up'}</button> <button class=lk data-a=rms>Remove set</button></span></div></div>`;
@@ -40,24 +44,17 @@ function exerciseCard(it, i) {
     `<div class=row><button class=b data-a=addset data-i=${i}>+ Set</button><button class=b data-a=repl data-i=${i}>⇄ Replace</button></div></div>`
   );
 }
+// The kg field's text: weight on the bar (2 decimals at most), BW for a logged bodyweight set.
+const kgText = r => (+r.w > 0 ? fmt(roundToStep(+r.w, 0.01)) : r.done ? 'BW' : '');
+
+// The line under a set: its e1RM (RIR view) or only warnings (% view), and whether it was adjusted.
 function setInfoHtml(it, r, ex) {
   const P = it.mode == 'pct',
     x = setInfo(r, ex, state.pr[ex.id]),
-    kg = P
-      ? it.bwo
-        ? +r.w > 0
-          ? `<b>+${fmt(roundToStep(+r.w, 0.01))} kg</b>`
-          : r.w === '' && !r.done
-            ? ''
-            : '<b>BW</b>'
-        : +r.w > 0
-          ? `<b>${fmt(roundToStep(+r.w, 0.01))} kg</b>`
-          : ''
-      : '',
     adj = r.adj && !r.done ? 'adjusted' : '',
     note =
-      x.s && (!P || x.w || isMaxTest(r) || r.wu) ? `<span class="${x.w ? 'wr' : ''}">${esc(x.s)}</span>` : ''; // % view: just the kg, plus warnings
-  return [kg, note, adj].filter(Boolean).join(' · ');
+      x.s && (!P || x.w || isMaxTest(r) || r.wu) ? `<span class="${x.w ? 'wr' : ''}">${esc(x.s)}</span>` : '';
+  return [note, adj].filter(Boolean).join(' · ');
 }
 
 function backupReminder() {

@@ -319,6 +319,28 @@ label textarea {
     sans-serif;
   color: var(--m);
 }
+.wcell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+label.pctin {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--m);
+}
+.set label.pctin input {
+  height: 28px;
+  min-height: 0;
+  font:
+    600 16px BC,
+    system-ui,
+    sans-serif;
+}
 .set input:focus {
   background: var(--blud);
   box-shadow: inset 0 0 0 2px var(--blu);
