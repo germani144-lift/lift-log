@@ -89,8 +89,8 @@ app.addEventListener('input', e => {
     r.auto = false;
     delete r.adj;
     if (f == 'p') {
-      // % of 1RM typed: work out the kg (minus bodyweight where it's included) and show it in the kg field.
-      r.w = v === '' ? '' : it.ref > 0 ? Math.max(0, (v / 100) * it.ref - (it.bwo || 0)) : '';
+      // % of 1RM typed: work out the kg in whole kilos (minus bodyweight where it's included), shown in the kg field.
+      r.w = v === '' ? '' : it.ref > 0 ? Math.max(0, Math.round((v / 100) * it.ref - (it.bwo || 0))) : '';
       $('[data-f=w]', s).value = kgText(r);
     } else {
       r[f] = v;

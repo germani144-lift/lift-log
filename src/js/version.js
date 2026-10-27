@@ -1,1 +1,1 @@
-const VER='2.16'; // app version, bumped automatically by tools/build.py on every change
+const VER='2.17'; // app version, bumped automatically by tools/build.py on every change

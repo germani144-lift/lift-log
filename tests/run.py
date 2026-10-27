@@ -284,7 +284,7 @@ def percent_plan_and_switching_views(app):
     eq(app.js("workout.items[0].mode"), "pct", "workout starts in the plan's mode")
     eq([r["w"] for r in app.js("workout.items[0].rows")], [70, 70, 70], "no history yet: exactly the plan, 70% of 100")
     hdr = app.pg.inner_text(".set.hdr")
-    ok("kg" in hdr and "% 1RM" in hdr and "RPE" in hdr, f"% view headers, got {hdr!r}")
+    ok("Weight (kg)" in hdr and "RPE" in hdr, f"% view headers, got {hdr!r}")
     row = lambda j: f'.set[data-j="{j}"] >> '
     eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "input[data-f=p]"), app.pg.input_value(row(0) + "[data-f=rir]")),
        ("70", "70", ""), "shows kg first, the % under it, and an empty RPE to fill in")
@@ -314,11 +314,17 @@ def percent_view_kg_and_percent_update_each_other(app):
     eq((app.pg.input_value(pc), app.js("workout.items[0].rows[0].w")), ("80", 96), "kg typed: the % follows as you type")
     app.pg.locator(pc).fill("85")
     eq((app.pg.input_value(kg), app.js("workout.items[0].rows[0].w")), ("102", 102), "% typed: the kg follows")
+    app.pg.locator(pc).fill("82.5")
+    eq(app.pg.input_value(kg), "99", "82.5% of 120 = 99 kg")
+    app.pg.locator(pc).fill("81")
+    eq((app.pg.input_value(kg), app.js("workout.items[0].rows[0].w")), ("97", 97), "81% of 120 = 97.2: kg from a % is whole kilos")
+    app.pg.locator(kg).fill("97"); app.pg.locator(kg).fill("100")
+    eq(app.pg.input_value(pc), "83", "% has no decimals (100/120 = 83.3)")
     app.pg.locator(pc).fill("")
     eq((app.pg.input_value(kg), app.js("workout.items[0].rows[0].w")), ("", ""), "clearing the % clears the kg")
     app.pg.locator(kg).fill("100"); app.click(row + "[data-a=log]")
     eq(app.js("(async()=>(await getAll('sets')).pop().w)()"), 100, "the kg is what gets logged")
-    eq(app.pg.input_value(pc), "83.3", "logged set still shows its %")
+    eq(app.pg.input_value(pc), "83", "logged set still shows its %")
     eq(app.errors, [])
 
 

@@ -319,27 +319,39 @@ label textarea {
     sans-serif;
   color: var(--m);
 }
-.wcell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+.set.pct {
+  row-gap: 6px;
 }
-label.pctin {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+/* % view: the % of 1RM pill under the kg field, in the same grid column so the two line up exactly. */
+.set label.pctin {
+  grid-column: 1;
+  position: relative;
+  display: block;
   margin: 0;
-  font-size: 13px;
-  color: var(--m);
 }
 .set label.pctin input {
-  height: 28px;
+  height: 32px;
   min-height: 0;
+  padding: 0 16px; /* even padding keeps the number centred under the kg; the % sits in the right padding */
   font:
-    600 16px BC,
+    600 17px BC,
     system-ui,
     sans-serif;
+}
+.set label.pctin span {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font:
+    600 14px BC,
+    system-ui,
+    sans-serif;
+  color: var(--m);
+  pointer-events: none;
+}
+.set.pct .inf {
+  grid-column: 2 / -1;
 }
 .set input:focus {
   background: var(--blud);
