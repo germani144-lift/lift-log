@@ -238,13 +238,11 @@ const WARMUP_RAMP = {
 
 /* ---------- Adjusting the rest of the exercise after each set ----------
    After you log a set, the sets after it that you haven't edited adjust to how that set really went.
-   They never move more than ±10% from the plan.
+   In the % view they never move more than ±10% from the plan.
      % view:   the weights scale by today's strength compared with your usual strength at that rep count.
-     RIR view: the weight stays and the reps move to hit the target RIR, unless they'd leave the rep range,
-               in which case the weight moves towards the range and the reps are what you can do at the new
-               weight (with no weight step, only the reps move).
-               Each following set assumes you're about 1.5% weaker, for fatigue. A set never drops below the
-               weight you just lifted (that floor can go past +10%).
+     RIR view: the next sets take the weight you just lifted and the reps you can do there at the target RIR;
+               the weight moves one step only when the reps would leave the rep range.
+               Each following set assumes you're about 1.5% weaker, for fatigue.
    Rows: { w, r, rir, pw: planned weight (total load), auto: true until you edit it, done, wu, adj: adjusted }. */
 
 // A logged set (in total load) that can tell us today's strength. Deliberately not the same test as
@@ -296,60 +294,54 @@ function adjustRemainingSetsPct(item, j, ex, history, currentSession) {
 }
 
 // RIR view.
-// Also: never suggest less than you just lifted. If the logged set was heavier than a later set's weight, that
-// set goes up to at least the logged weight (its reps follow from your strength at that weight). This applies
-// even when the logged set can't say anything about your strength (no RIR, or 5+): then only the weight moves.
+// The next sets follow the weight you just lifted (heavier or lighter), and their reps are what that set says
+// you can do at that weight, for the target RIR. Predicting at the same weight is reliable; predicting across
+// a big jump (1 kg on a 4 kg dumbbell is 25%) is not. The weight only moves when the reps would leave the rep
+// range: step by step towards it, never past it (if one step jumps over the whole range, it stays). Without a
+// RIR on the logged set, only the weight follows; a 5+ set changes nothing.
+const DEFAULT_STEP = 1; // kg, when the exercise has no weight step set
+
 function adjustRemainingSetsRir(item, j, ex) {
   if (item.mode == 'pct') return;
   const loggedRow = item.rows[j],
     logged = withBodyweight(ex, loggedRow),
     loggedWeight = !loggedRow.wu && +logged.w > 0 ? +logged.w : 0, // total load
-    canAdjust = tellsStrength(logged), // also without a weight step: then the weight stays and the reps adjust
-    today = canAdjust ? estimate1RM(+logged.w, +logged.r, +logged.rir) : 0;
+    canAdjust = tellsStrength(logged),
+    today = canAdjust ? estimate1RM(+logged.w, +logged.r, +logged.rir) : 0,
+    step = ex.inc > 0 ? ex.inc : DEFAULT_STEP;
 
   let setsAhead = 0;
   for (let q = j + 1; q < item.rows.length; q++) {
     const row = item.rows[q];
     if (row.done || row.wu || !row.auto) continue;
     const weightBefore = +withBodyweight(ex, row).w || 0;
-    // The weight this set must not go below: what you just lifted, if that's heavier than this set.
-    const atLeast = loggedWeight > weightBefore ? loggedWeight : 0;
+    const base = loggedWeight || weightBefore;
 
     if (!canAdjust || !(+row.r > 0) || !hasRir(row)) {
-      if (atLeast) {
-        row.w = toLoadedWeight(ex, atLeast);
+      if (loggedWeight && loggedWeight !== weightBefore && !(+loggedRow.rir > 5)) {
+        row.w = toLoadedWeight(ex, loggedWeight);
         row.adj = true;
       }
       continue;
     }
 
     const strength = today * Math.pow(0.985, ++setsAhead); // about 1.5% weaker per set, for fatigue
-    const planned = +row.pw || +row.w || 0;
-    const withinPlan = w => {
-      if (planned > 0)
-        w = Math.min(
-          Math.max(roundToStep(planned * 1.1, ex.inc), atLeast),
-          Math.max(roundToStep(planned * 0.9, ex.inc), w),
-        );
-      return Math.max(atLeast, w);
-    };
-    const weightFor = reps => withinPlan(roundToStep(strength * fractionOf1RM(reps, +row.rir), ex.inc));
-
     const repsAtWeight = w => Math.max(1, Math.round(repsAt(strength, w, +row.rir)));
-
-    let weight = Math.max(weightBefore, atLeast),
-      reps = +row.r;
-    if (!(weight > 0)) {
-      if (ex.inc > 0) weight = weightFor(reps);
-    } else {
+    let weight = base,
       reps = repsAtWeight(weight);
-      // Outside the rep range: move the weight towards it (only with a weight step) and then take the reps
-      // you can really do at the weight it lands on. Big steps (dumbbells) or the ±10% limit can stop the
-      // weight short, e.g. 4 kg x 22 @ 4 RIR with 2 kg steps: 6 kg is too far, so 4 kg x 23, not 4 kg x 12.
-      if (ex.inc > 0 && (reps > item.hi || reps < item.lo)) {
-        weight = weightFor(reps > item.hi ? item.hi : item.lo);
-        reps = repsAtWeight(weight);
-      }
+    // Too light: step up while the reps are above the range and the next step still reaches it.
+    for (let k = 0; k < 100 && reps > item.hi; k++) {
+      const heavier = roundToStep(weight + step, step);
+      if (repsAtWeight(heavier) < item.lo) break;
+      weight = heavier;
+      reps = repsAtWeight(weight);
+    }
+    // Too heavy: step down while the reps are below the range and the next step doesn't overshoot it.
+    for (let k = 0; k < 100 && reps < item.lo; k++) {
+      const lighter = roundToStep(weight - step, step);
+      if (!(lighter > 0) || repsAtWeight(lighter) > item.hi) break;
+      weight = lighter;
+      reps = repsAtWeight(weight);
     }
     if (reps !== +row.r || weight !== weightBefore) {
       row.r = reps;

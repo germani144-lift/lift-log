@@ -503,6 +503,24 @@ def heavier_set_raises_the_next_sets(app):
 
 
 @test
+def lighter_set_next_sets_follow_with_realistic_reps(app):
+    # The lateral-raise case: 1 kg steps, 5-25 reps; suggested 5 kg, you do 4 kg x 22 @ 4 RIR.
+    app.new_exercise("Raises", inc=1, lo=5, hi=25)
+    app.seed_sets("Raises", [[(5, 18, 2), (5, 18, 2)], [(4, 24, 3.5), (5, 18, 4), (5, 21, 2)]])
+    app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
+    eq([r["w"] for r in app.js("workout.items[0].rows")], [5, 5, 5], "suggested 5 kg")
+    app.click("[data-a=addset]")
+    eq({k: app.js("workout.items[0].rows")[3].get(k) for k in ("rir", "auto")}, {"rir": 2, "auto": True}, "+ Set copies the RIR and adjusts too")
+    row = '.set[data-j="0"] >> '
+    app.pg.locator(row + "input[data-f=w]").fill("4"); app.pg.locator(row + "input[data-f=r]").fill("22")
+    app.pg.select_option(row + "[data-f=rir]", "4")
+    app.click(row + "[data-a=log]")
+    eq([(r["w"], r["r"]) for r in app.js("workout.items[0].rows")[1:]], [(4, 23), (4, 22), (4, 22)],
+       "4 kg x 22 @ 4 RIR: the next sets stay at 4 kg with the reps you can do there, not 5 kg x 12")
+    eq(app.errors, [])
+
+
+@test
 def rir_is_picked_and_5plus_is_ignored_for_suggestions(app):
     app.new_exercise("Squat", lo=5, hi=8)
     app.seed_sets("Squat", [[(100, 6, 2)] * 3] * 2)

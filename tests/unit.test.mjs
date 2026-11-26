@@ -186,9 +186,9 @@ test('RIR view: a set heavier than planned lifts the next sets to at least that 
   assert.deepEqual(plain(it.rows.slice(1).map(r => [r.w, r.r])), [[6, 21], [6, 20]]);
 });
 
-test('RIR view: the floor can go past the usual +10% limit', () => {
-  // Planned 100 x 10 @ 2, but you did 110 x 10 @ 2 (strength 154). Before, set 2 was capped at 102.5 x 12;
-  // now it stays at 110: 30 x (151.69/110 - 1) - 2 = 9.4 -> 110 x 9.
+test('RIR view: the next sets follow your weight even far from the plan', () => {
+  // Planned 100 x 10 @ 2, but you did 110 x 10 @ 2 (strength 154). Set 2 stays at 110:
+  // 30 x (151.69/110 - 1) - 2 = 9.4 -> 110 x 9.
   const it = item('rir', [[110, 10, 2], [100, 10, 2]]);
   it.rows[0].done = true;
   T.adjustRemainingSetsRir(it, 0, bench);
@@ -202,7 +202,18 @@ test('RIR view: without RIR on the logged set, only the weight moves up', () => 
   assert.deepEqual([it.rows[1].w, it.rows[1].r, it.rows[1].adj], [6, 20, true]);
   const lighter = { ...item('rir', [[4, 22, ''], [5, 20, 2]]), lo: 15, hi: 25 };
   T.adjustRemainingSetsRir(lighter, 0, ex);
-  assert.deepEqual([lighter.rows[1].w, lighter.rows[1].adj], [5, undefined], 'a lighter set never pulls the next ones down by itself');
+  assert.deepEqual([lighter.rows[1].w, lighter.rows[1].r], [4, 20], 'lighter too: the next sets follow your weight');
+});
+
+test('RIR view: a lighter set than suggested: the next sets follow it, with realistic reps', () => {
+  // Suggested 5 kg x 22 (5–25 reps, 1 kg steps). You did 4 kg x 22 @ 4 RIR: strength 7.47.
+  // Set 2 at 4 kg: 30 x (7.35/4 - 1) - 2 = 23.2 -> 4 kg x 23 (not 5 kg x 12 from stretching one set to 5 kg).
+  // Set 3: 7.47 x 0.985² = 7.24 -> 22.3 -> 4 kg x 22.
+  const raises = { inc: 1, lo: 5, hi: 25, rir: 2 };
+  const it = { ...item('rir', [[4, 22, 4], [5, 22, 2], [5, 21, 2]]), lo: 5, hi: 25 };
+  it.rows[0].done = true;
+  T.adjustRemainingSetsRir(it, 0, raises);
+  assert.deepEqual(plain(it.rows.slice(1).map(r => [r.w, r.r])), [[4, 23], [4, 22]]);
 });
 
 test('RIR view: when the weight can’t move enough, the reps follow what you can really do', () => {
@@ -214,10 +225,10 @@ test('RIR view: when the weight can’t move enough, the reps follow what you ca
   it.rows[0].done = true;
   T.adjustRemainingSetsRir(it, 0, raises);
   assert.deepEqual([it.rows[1].w, it.rows[1].r, it.rows[1].adj], [4, 23, true]);
-  // No weight step set: the weight never moves, the reps do.
-  const fixed = item('rir', [[4, 22, 4], [4, 12, 2]]);
-  T.adjustRemainingSetsRir(fixed, 0, { inc: 0, lo: 8, hi: 12, rir: 2 });
-  assert.deepEqual([fixed.rows[1].w, fixed.rows[1].r], [4, 23]);
+  // No weight step set: a 1 kg step is assumed. 5 kg: 30 x (7.35/5 - 1) - 2 = 12.1 -> 5 kg x 12, in the range.
+  const noStep = item('rir', [[4, 22, 4], [4, 12, 2]]);
+  T.adjustRemainingSetsRir(noStep, 0, { inc: 0, lo: 8, hi: 12, rir: 2 });
+  assert.deepEqual([noStep.rows[1].w, noStep.rows[1].r], [5, 12]);
 });
 
 test('% view: weights follow today’s strength vs your usual at that rep count, max ±10%', () => {

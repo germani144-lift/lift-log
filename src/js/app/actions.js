@@ -275,7 +275,8 @@ const actions = {
   addset: (s, d) => {
     const rows = workout.items[d.i].rows,
       l = rows[rows.length - 1] || {};
-    rows.push({ w: l.w ?? '', r: l.r ?? '', p: l.p ?? '' });
+    // A copy of the last set that adjusts like the suggested ones (until you edit it).
+    rows.push({ w: l.w ?? '', r: l.r ?? '', rir: l.rir ?? '', pw: l.pw ?? (+l.w || 0), auto: true });
     saveWorkout();
     render();
   },
