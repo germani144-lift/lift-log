@@ -15,6 +15,8 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 - **Adjusting as you go:**
   - **% view:** after each set, the app compares your RPE with how that lift usually feels at a similar rep count in your history (or, with no history yet, with your first set today). Harder than usual and the remaining sets get lighter; easier and they get heavier. Each workout also starts from your recent trend at that rep count ("−4% vs plan from recent sessions"). Always within ±10% of the plan.
   - **RIR view:** after each set, the next sets keep their weight and move the reps toward the target RIR; the weight only moves if the reps would leave the range (max ±10%, about 1.5% easier per set for fatigue).
+  - **Reps you can really do:** when the reps would leave the rep range, the weight moves towards it; if your weight steps (dumbbells) or the ±10% limit stop it short, the reps become what you can actually do at that weight. 4 kg × 22 @ 4 RIR on lateral raises (8–12 reps, 2 kg steps) makes the next set 4 kg × 23, not 4 kg × 12. Exercises without a weight step adjust reps only.
+  - **Never less than you just lifted:** in the RIR view, if you log a set heavier than the next sets' weight (say 6 kg × 22 when 5 kg × 20 was suggested), those sets go up to at least that weight, with reps worked out from your strength at the new weight (6 × 21, 6 × 20). This can go past the usual ±10%. Without a RIR on the logged set, only the weight moves.
   - Sets you've edited yourself are never changed; adjusted sets say "adjusted".
 - **RIR picker:** RIR is chosen from a list (0–5 in half steps, plus **5+**), never typed; in the % view the same list shows as RPE. Plan and exercise targets go up to 5. A **5+** set stays in history (shown as "5+") and counts toward volume, but like a warm-up it's never used for suggestions, the strength estimate, 1RM or the next-set adjustment.
 - **Warm-ups:** set 0–4 warm-up sets per exercise to get a ramp before your working sets; any set can be marked as a warm-up. Warm-ups never count toward suggestions or 1RM/PB.
@@ -38,7 +40,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 
 **% of 1RM plans.** The plan says e.g. 3 × 2 @ 80%. The base is your tested 1RM, or your strength estimate if you haven't tested one, nudged (max ±10%) by your trend at that rep count: the last 3 sessions against the last 10.
 
-**Adjusting during the workout.** After each logged set, the remaining sets you haven't touched are recalculated from that set's e1RM, never more than ±10% from the plan. In RIR view the weight stays and the reps move to hit the target RIR (assuming about 1.5% fatigue per set); in % view the weights scale by today's strength compared with your usual at that rep count. Sets you edit yourself are never changed.
+**Adjusting during the workout.** After each logged set, the remaining sets you haven't touched are recalculated from that set's e1RM, never more than ±10% from the plan. In RIR view the weight stays and the reps move to hit the target RIR (assuming about 1.5% fatigue per set), and a set never drops below the weight you just lifted; in % view the weights scale by today's strength compared with your usual at that rep count. Sets you edit yourself are never changed.
 
 **Design choices.**
 - *Offline-first, no account.* Gyms have bad signal and training data is personal, so everything lives on the phone (IndexedDB); backup is opt-in, to a private GitHub repo you own.

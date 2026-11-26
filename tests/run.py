@@ -30,6 +30,26 @@ def serve():
     return f"http://127.0.0.1:{port}/index.html"
 
 
+def polled_waits(pg):
+    """Make pg.wait_for_function poll from Python. Playwright's own version re-checks a string by evaluating it
+    inside the page, which the app's CSP blocks, so it only worked when the condition was already true at the
+    first check (flaky on a slow machine). Every page the tests open goes through this."""
+    def wait(expression, arg=None, timeout=8000, **_):
+        deadline = time.time() + timeout / 1000
+        while True:
+            try:
+                if pg.evaluate(expression, arg):
+                    return True
+            except Exception:
+                if time.time() > deadline:
+                    raise
+            if time.time() > deadline:
+                raise AssertionError(f"timed out waiting for {expression!r}")
+            time.sleep(0.05)
+    pg.wait_for_function = wait
+    return pg
+
+
 class App:
     """A fresh app instance in its own browser context."""
 
@@ -40,11 +60,17 @@ class App:
         self.pg.on("pageerror", lambda e: self.errors.append(str(e)))
         self.pg.on("console", lambda m: m.type == "error" and self.errors.append(m.text))
         self.pg.on("dialog", lambda d: (self.dialogs.append(d.message), d.accept("90")))
+        # wait_for_function re-checks a string by evaluating it inside the page, which the app's CSP blocks: it
+        # only worked when the condition was already true at the first check. Poll from here instead.
+        polled_waits(self.pg)
         self.pg.goto(url)
-        try:
-            self.pg.wait_for_function("typeof state!=='undefined'&&document.querySelector('nav')", timeout=8000)
-        except Exception:
-            raise AssertionError("app didn't start (blocked script? wrong CSP hash?) " + "; ".join(self.errors)[:300])
+        # Poll from here rather than with wait_for_function: that re-checks by evaluating a string inside the
+        # page, which the app's CSP blocks, so it only worked when the app was already up at the first check.
+        deadline = time.time() + 8
+        while not self.pg.evaluate("typeof state!=='undefined'&&!!document.querySelector('nav')"):
+            if time.time() > deadline:
+                raise AssertionError("app didn't start (blocked script? wrong CSP hash?) " + "; ".join(self.errors)[:300])
+            time.sleep(0.05)
 
     def js(self, expr, arg=None):
         return self.pg.evaluate(expr, arg)
@@ -460,6 +486,23 @@ def bodyweight_sets_count_toward_strength(app):
 
 
 @test
+def heavier_set_raises_the_next_sets(app):
+    app.new_exercise("Curl", inc=1, lo=15, hi=25)
+    app.seed_sets("Curl", [[(5, 19, 2)] * 3])
+    app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
+    rows = app.js("workout.items[0].rows")
+    eq([r["w"] for r in rows], [5, 5, 5], "suggested 5 kg for every set")
+    row = '.set[data-j="0"] >> '
+    app.pg.locator(row + "input[data-f=w]").fill("6"); app.pg.locator(row + "input[data-f=r]").fill("22")
+    eq(app.js("workout.items[0].rows[0].rir"), 2, "RIR at the target")
+    app.click(row + "[data-a=log]")
+    rows = app.js("workout.items[0].rows")
+    eq([(r["w"], r["r"]) for r in rows[1:]], [(6, 21), (6, 20)], "6 kg x 22 @ 2 RIR: the next sets go to 6 kg, reps from your strength")
+    eq((app.pg.input_value('.set[data-j="1"] >> input[data-f=w]'), "adjusted" in app.pg.inner_text('.set[data-j="1"] .inf')), ("6", True), "shown and marked adjusted")
+    eq(app.errors, [])
+
+
+@test
 def rir_is_picked_and_5plus_is_ignored_for_suggestions(app):
     app.new_exercise("Squat", lo=5, hi=8)
     app.seed_sets("Squat", [[(100, 6, 2)] * 3] * 2)
@@ -481,7 +524,7 @@ def rir_is_picked_and_5plus_is_ignored_for_suggestions(app):
 def _sw_context(app):
     """A browser profile with the service worker switched on (the other tests block it)."""
     ctx = app.ctx.browser.new_context(viewport={"width": 390, "height": 844})
-    pg = ctx.new_page()
+    pg = ctx.new_page(); polled_waits(pg)
     return ctx, pg, app.pg.url.rsplit("/", 1)[0] + "/"
 
 
@@ -535,7 +578,7 @@ def opens_without_downloading_and_a_release_takes_over(app):
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_address[1]}/"
     ctx = app.ctx.browser.new_context(viewport={"width": 390, "height": 844})
-    pg = ctx.new_page()
+    pg = ctx.new_page(); polled_waits(pg)
     started = "typeof state!=='undefined'&&document.querySelector('nav')"
     try:
         pg.goto(base + "index.html"); pg.wait_for_function(started)
@@ -570,7 +613,7 @@ def opens_without_downloading_and_a_release_takes_over(app):
 
 @test
 def storage_keys_are_prefixed_and_old_ones_move_over(app):
-    ctx = app.ctx.browser.new_context(service_workers="block"); pg = ctx.new_page()
+    ctx = app.ctx.browser.new_context(service_workers="block"); pg = polled_waits(ctx.new_page())
     base = app.pg.url.rsplit("/", 1)[0] + "/"
     try:
         pg.goto(base + "README.md")

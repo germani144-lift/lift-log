@@ -175,6 +175,51 @@ test('RIR view: sets you edited, warm-ups and 5+ sets are left alone', () => {
   assert.equal(five.rows[1].adj, undefined, 'a 5+ set never drives adjustments');
 });
 
+test('RIR view: a set heavier than planned lifts the next sets to at least that weight', () => {
+  // Planned 3 x 5 kg x 20 @ 2 RIR (range 15–25, 1 kg steps). Set 1 done at 6 kg x 22 @ 2: strength 6 x (1 + 24/30) = 10.8.
+  // Set 2 (1.5% fatigue): 10.64 -> at 6 kg, 30 x (10.64/6 - 1) - 2 = 21.2 -> 6 kg x 21.
+  // Set 3: 10.8 x 0.985² = 10.48 -> 20.4 -> 6 kg x 20.
+  const ex = { inc: 1, lo: 15, hi: 25, rir: 2 };
+  const it = { ...item('rir', [[6, 22, 2], [5, 20, 2], [5, 20, 2]]), lo: 15, hi: 25 };
+  it.rows[0].done = true;
+  T.adjustRemainingSetsRir(it, 0, ex);
+  assert.deepEqual(plain(it.rows.slice(1).map(r => [r.w, r.r])), [[6, 21], [6, 20]]);
+});
+
+test('RIR view: the floor can go past the usual +10% limit', () => {
+  // Planned 100 x 10 @ 2, but you did 110 x 10 @ 2 (strength 154). Before, set 2 was capped at 102.5 x 12;
+  // now it stays at 110: 30 x (151.69/110 - 1) - 2 = 9.4 -> 110 x 9.
+  const it = item('rir', [[110, 10, 2], [100, 10, 2]]);
+  it.rows[0].done = true;
+  T.adjustRemainingSetsRir(it, 0, bench);
+  assert.deepEqual([it.rows[1].w, it.rows[1].r], [110, 9]);
+});
+
+test('RIR view: without RIR on the logged set, only the weight moves up', () => {
+  const ex = { inc: 1, lo: 15, hi: 25, rir: 2 };
+  const it = { ...item('rir', [[6, 22, ''], [5, 20, 2]]), lo: 15, hi: 25 };
+  T.adjustRemainingSetsRir(it, 0, ex);
+  assert.deepEqual([it.rows[1].w, it.rows[1].r, it.rows[1].adj], [6, 20, true]);
+  const lighter = { ...item('rir', [[4, 22, ''], [5, 20, 2]]), lo: 15, hi: 25 };
+  T.adjustRemainingSetsRir(lighter, 0, ex);
+  assert.deepEqual([lighter.rows[1].w, lighter.rows[1].adj], [5, undefined], 'a lighter set never pulls the next ones down by itself');
+});
+
+test('RIR view: when the weight can’t move enough, the reps follow what you can really do', () => {
+  // Lateral raises, 2 kg steps, 8–12 reps. Planned 4 kg x 12 @ 2; set 1 done at 4 kg x 22 @ 4 RIR.
+  // Strength 4 x (1 + 26/30) = 7.47, set 2: 7.35. 23 reps at 4 kg is above 12, but 12 reps needs 5.0 kg -> 6 kg,
+  // past +10% of the plan, so the weight stays at 4 kg and the reps become 30 x (7.35/4 - 1) - 2 = 23.
+  const raises = { inc: 2, lo: 8, hi: 12, rir: 2 };
+  const it = item('rir', [[4, 22, 4], [4, 12, 2]]);
+  it.rows[0].done = true;
+  T.adjustRemainingSetsRir(it, 0, raises);
+  assert.deepEqual([it.rows[1].w, it.rows[1].r, it.rows[1].adj], [4, 23, true]);
+  // No weight step set: the weight never moves, the reps do.
+  const fixed = item('rir', [[4, 22, 4], [4, 12, 2]]);
+  T.adjustRemainingSetsRir(fixed, 0, { inc: 0, lo: 8, hi: 12, rir: 2 });
+  assert.deepEqual([fixed.rows[1].w, fixed.rows[1].r], [4, 23]);
+});
+
 test('% view: weights follow today’s strength vs your usual at that rep count, max ±10%', () => {
   // Usually 100 x 5 @ 2 (e1RM 123.33). Today 105 x 5 @ 2: +5% -> the next set's planned 100 becomes 105.
   const past = history([[[100, 5, 2]]]);
